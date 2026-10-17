@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from alm_etl.config import MAPPED_COLUMNS, SOURCES
 from alm_etl.transformations import (
     apply_mapping,
@@ -31,6 +33,13 @@ def test_apply_mapping_source2_defaults_country_and_discount_check(spark):
     assert row.Country is None
     assert row.DiscountCheck == "NA"
     assert row.LoanCheck == "HasLoan"
+
+
+def test_apply_mapping_fails_when_source_column_is_missing(spark):
+    df = spark.createDataFrame([("1",)], "ClientNumber string")
+
+    with pytest.raises(ValueError, match="ClientGroup"):
+        apply_mapping(df, {"ClientNumber": "ClientNumber", "ClientGroup": "ClientGroup"})
 
 
 def test_cast_to_final_schema_casts_safely_and_fills_defaults(spark):

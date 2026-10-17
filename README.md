@@ -87,9 +87,13 @@ does not stop it.
   computed per snapshot. Notebook 02 overwrites only the snapshot dates it loads (`replaceWhere`
   `SnapshotDate IN (...)`). Earlier snapshots stay, and a rerun gives the same result. The first run
   is a plain overwrite because the table does not exist yet.
-- **try/except only around I/O.** Only `io.py` reads files and writes tables, and that is where the
-  try/except blocks are. They log the path or table with `logging` and re-raise. The transformations
-  are pure functions (DataFrame in, DataFrame out) with no exception handling.
+- **try/except only around I/O.** `read_source` and `write_table` in `io.py` catch errors, log the
+  path or table name with `logging` and re-raise, so the run still fails but the log says where.
+  The transformations have no try/except on purpose: Spark is lazy, so they only build a plan and
+  any error is raised later, when the data is written (inside `write_table`). A try/except around
+  them would catch nothing. Bad values are handled as data instead (`try_cast` -> null/default).
+  The one input check is in `apply_mapping`: it raises a clear `ValueError` when a mapped source
+  column is missing, instead of a long Spark error.
 - **Lean tests.** There is one focused test per behaviour. The cap test uses the example from the mapping file.
 
 ## Business rules as implemented
@@ -133,3 +137,12 @@ and got the same numbers.
 | 2 | Number of records with EnterprizeSize `M` | 6 |
 | 3 | Total AmountEUR for SourceSystem `Source2` | 1,800,631.68 |
 | 4 | Total OriginalAmount where ClientSecuredIND is false | 312,301.56 |
+
+## Possible next steps
+
+- **Read the mapping from a file instead of code.** The mapping from `MappingList.xlsx` is copied into
+  `config.py`. If the business mapping changes often, the Mapping tab could be exported to a small
+  `mapping.csv` in the repo (the Excel itself is binary, so it is not committed) and `config.py` could
+  build `SOURCES` and `FINAL_SCHEMA` from it. That way a business change does not need a code change.
+- **Data quality reporting.** Values that become null because they are invalid (like `2010-05-111`)
+  could be counted and logged, or written to a quarantine table.
